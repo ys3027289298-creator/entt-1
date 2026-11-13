@@ -14,6 +14,7 @@
 #include "../stl/tuple.hpp"
 #include "../stl/type_traits.hpp"
 #include "../stl/utility.hpp"
+#include "access.hpp"
 #include "entity.hpp"
 #include "fwd.hpp"
 
@@ -26,62 +27,29 @@ template<typename, typename, typename>
 class extended_group_iterator;
 
 template<typename It, typename... Owned, typename... Get>
-class extended_group_iterator<It, owned_t<Owned...>, get_t<Get...>> {
-    template<typename Type>
-    [[nodiscard]] auto index_to_element([[maybe_unused]] Type &cpool) const {
-        if constexpr(stl::is_void_v<typename Type::value_type>) {
-            return stl::make_tuple();
-        } else {
-            return stl::forward_as_tuple(cpool.rbegin()[it.index()]);
-        }
-    }
+class extended_group_iterator<It, owned_t<Owned...>, get_t<Get...>>: public extended_iterator<It, positional_accessor<Owned>..., entity_accessor<Get>...> {
+    using base_type = extended_iterator<It, positional_accessor<Owned>..., entity_accessor<Get>...>;
+
+    template<stl::size_t... OIndex, stl::size_t... GIndex>
+    extended_group_iterator(typename base_type::iterator_type from, stl::tuple<Owned *..., Get *...> cpools, stl::index_sequence<OIndex...>, stl::index_sequence<GIndex...>)
+        : base_type{from, positional_accessor<Owned>{stl::get<OIndex>(cpools)}..., entity_accessor<Get>{stl::get<sizeof...(OIndex) + GIndex>(cpools)}...} {}
 
 public:
-    using iterator_type = It;
-    using value_type = decltype(stl::tuple_cat(stl::make_tuple(*stl::declval<It>()), stl::declval<Owned>().get_as_tuple({})..., stl::declval<Get>().get_as_tuple({})...));
-    using pointer = input_iterator_pointer<value_type>;
-    using reference = value_type;
-    using difference_type = stl::ptrdiff_t;
-    using iterator_category = stl::input_iterator_tag;
-    using iterator_concept = stl::forward_iterator_tag;
-
     constexpr extended_group_iterator()
-        : it{},
-          pools{} {}
+        : base_type{} {}
 
-    extended_group_iterator(iterator_type from, stl::tuple<Owned *..., Get *...> cpools)
-        : it{from},
-          pools{stl::move(cpools)} {}
+    extended_group_iterator(typename base_type::iterator_type from, stl::tuple<Owned *..., Get *...> cpools)
+        : extended_group_iterator{from, stl::move(cpools), stl::index_sequence_for<Owned...>{}, stl::index_sequence_for<Get...>{}} {}
 
     extended_group_iterator &operator++() noexcept {
-        return ++it, *this;
+        ++static_cast<base_type &>(*this);
+        return *this;
     }
 
     extended_group_iterator operator++(int) noexcept {
         const extended_group_iterator orig = *this;
         return ++(*this), orig;
     }
-
-    [[nodiscard]] reference operator*() const noexcept {
-        return stl::tuple_cat(stl::make_tuple(*it), index_to_element(*stl::get<Owned *>(pools))..., stl::get<Get *>(pools)->get_as_tuple(*it)...);
-    }
-
-    [[nodiscard]] pointer operator->() const noexcept {
-        return operator*();
-    }
-
-    [[nodiscard]] constexpr iterator_type base() const noexcept {
-        return it;
-    }
-
-    template<typename... Args>
-    [[nodiscard]] constexpr bool operator==(const extended_group_iterator<Args...> &other) const noexcept {
-        return it == other.it;
-    }
-
-private:
-    It it;
-    stl::tuple<Owned *..., Get *...> pools;
 };
 
 struct group_descriptor {

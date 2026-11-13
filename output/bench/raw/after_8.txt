@@ -1,0 +1,12 @@
+entities=10000 iterations=5000
+single_view_each: 5161.32 ns
+single_view_range: 5093.41 ns
+multi_view_each: 7457.08 ns
+multi_view_range: 10835.9 ns
+owned_group_each: 4850.55 ns
+owned_group_range: 5963.4 ns
+nonowned_group_range: 5840.71 ns
+storage_each: 3573.56 ns
+storage_reach: 4014.2 ns
+stable_view_each: 2439.05 ns
+checksum: 34681875000000

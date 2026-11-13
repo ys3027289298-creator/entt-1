@@ -12,6 +12,7 @@
 #include "../stl/tuple.hpp"
 #include "../stl/type_traits.hpp"
 #include "../stl/utility.hpp"
+#include "access.hpp"
 #include "entity.hpp"
 #include "fwd.hpp"
 
@@ -28,16 +29,6 @@ template<cvref_unqualified Type>
 const Type *view_placeholder() {
     static const Type placeholder{};
     return &placeholder;
-}
-
-[[nodiscard]] bool all_of(auto first, const auto last, const auto entt) noexcept {
-    for(; (first != last) && (*first)->contains(entt); ++first) {}
-    return first == last;
-}
-
-[[nodiscard]] bool none_of(auto first, const auto last, const auto entt) noexcept {
-    for(; (first != last) && !(*first)->contains(entt); ++first) {}
-    return first == last;
 }
 
 template<typename It>
@@ -57,95 +48,19 @@ template<typename Result, typename View, typename Other, stl::size_t... GLhs, st
     return elem;
 }
 
-template<typename Type, bool Checked, stl::size_t Get, stl::size_t Exclude>
-class view_iterator final {
-    template<typename, typename...>
-    friend struct extended_view_iterator;
-
-    using iterator_type = Type::const_iterator;
-    using iterator_traits = stl::iterator_traits<iterator_type>;
-
-    [[nodiscard]] bool valid(const iterator_traits::value_type entt) const noexcept {
-        return (!Checked || (entt != tombstone))
-               && ((Get == 1u) || (internal::all_of(pools.begin(), pools.begin() + index, entt) && internal::all_of(pools.begin() + index + 1, pools.end(), entt)))
-               && ((Exclude == 0u) || internal::none_of(filter.begin(), filter.end(), entt));
-    }
-
-    void seek_next() {
-        for(constexpr iterator_type sentinel{}; it != sentinel && !valid(*it); ++it) {}
-    }
-
-public:
-    using value_type = iterator_traits::value_type;
-    using pointer = iterator_traits::pointer;
-    using reference = iterator_traits::reference;
-    using difference_type = iterator_traits::difference_type;
-    using iterator_category = stl::forward_iterator_tag;
-
-    constexpr view_iterator() noexcept
-        : it{},
-          pools{},
-          filter{},
-          index{} {}
-
-    view_iterator(iterator_type first, stl::array<const Type *, Get> value, stl::array<const Type *, Exclude> excl, const stl::size_t idx) noexcept
-        : it{first},
-          pools{value},
-          filter{excl},
-          index{static_cast<difference_type>(idx)} {
-        ENTT_ASSERT((Get != 1u) || (Exclude != 0u) || pools[0u]->policy() == deletion_policy::in_place, "Non in-place storage view iterator");
-        seek_next();
-    }
-
-    view_iterator &operator++() noexcept {
-        ++it;
-        seek_next();
-        return *this;
-    }
-
-    view_iterator operator++(int) noexcept {
-        const view_iterator orig = *this;
-        return ++(*this), orig;
-    }
-
-    [[nodiscard]] pointer operator->() const noexcept {
-        return &*it;
-    }
-
-    [[nodiscard]] reference operator*() const noexcept {
-        return *operator->();
-    }
-
-    template<typename Other, auto... Args>
-    [[nodiscard]] constexpr bool operator==(const view_iterator<Other, Args...> &other) const noexcept {
-        return it == other.it;
-    }
-
-private:
-    iterator_type it;
-    stl::array<const Type *, Get> pools;
-    stl::array<const Type *, Exclude> filter;
-    difference_type index;
-};
-
 template<typename It, typename... Get>
-struct extended_view_iterator final {
-    using iterator_type = It;
-    using value_type = decltype(stl::tuple_cat(stl::make_tuple(*stl::declval<It>()), stl::declval<Get>().get_as_tuple({})...));
-    using pointer = input_iterator_pointer<value_type>;
-    using reference = value_type;
-    using difference_type = stl::ptrdiff_t;
-    using iterator_category = stl::input_iterator_tag;
-    using iterator_concept = stl::forward_iterator_tag;
+struct extended_view_iterator final: extended_iterator<It, entity_accessor<Get>...> {
+    using base_type = extended_iterator<It, entity_accessor<Get>...>;
 
     constexpr extended_view_iterator()
-        : it{} {}
+        : base_type{} {}
 
-    extended_view_iterator(iterator_type from)
-        : it{from} {}
+    extended_view_iterator(typename base_type::iterator_type from)
+        : extended_view_iterator{from, stl::index_sequence_for<Get...>{}} {}
 
     extended_view_iterator &operator++() noexcept {
-        return ++it, *this;
+        ++static_cast<base_type &>(*this);
+        return *this;
     }
 
     extended_view_iterator operator++(int) noexcept {
@@ -153,27 +68,10 @@ struct extended_view_iterator final {
         return ++(*this), orig;
     }
 
-    [[nodiscard]] reference operator*() const noexcept {
-        return [this]<auto... Index>(stl::index_sequence<Index...>) {
-            return stl::tuple_cat(stl::make_tuple(*it), static_cast<Get *>(const_cast<constness_as_t<typename Get::base_type, Get> *>(stl::get<Index>(it.pools)))->get_as_tuple(*it)...);
-        }(stl::index_sequence_for<Get...>{});
-    }
-
-    [[nodiscard]] pointer operator->() const noexcept {
-        return operator*();
-    }
-
-    [[nodiscard]] constexpr iterator_type base() const noexcept {
-        return it;
-    }
-
-    template<typename... Other>
-    [[nodiscard]] constexpr bool operator==(const extended_view_iterator<Other...> &other) const noexcept {
-        return it == other.it;
-    }
-
 private:
-    It it;
+    template<stl::size_t... Index>
+    extended_view_iterator(typename base_type::iterator_type from, stl::index_sequence<Index...>)
+        : base_type{from, entity_accessor<Get>{static_cast<Get *>(const_cast<constness_as_t<typename Get::base_type, Get> *>(stl::get<Index>(from.pools)))}...} {}
 };
 
 } // namespace internal

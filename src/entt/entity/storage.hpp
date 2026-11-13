@@ -15,6 +15,7 @@
 #include "../stl/type_traits.hpp"
 #include "../stl/utility.hpp"
 #include "../stl/vector.hpp"
+#include "access.hpp"
 #include "component.hpp"
 #include "entity.hpp"
 #include "fwd.hpp"
@@ -131,60 +132,17 @@ private:
     difference_type offset;
 };
 
-template<typename It, typename... Other>
-class extended_storage_iterator final {
-    template<typename, typename...>
-    friend class extended_storage_iterator;
-
-public:
-    using iterator_type = It;
-    using value_type = decltype(stl::tuple_cat(stl::make_tuple(*stl::declval<It>()), stl::forward_as_tuple(*stl::declval<Other>()...)));
-    using pointer = input_iterator_pointer<value_type>;
-    using reference = value_type;
-    using difference_type = stl::ptrdiff_t;
-    using iterator_category = stl::input_iterator_tag;
-    using iterator_concept = stl::forward_iterator_tag;
-
-    constexpr extended_storage_iterator()
-        : it{} {}
-
-    constexpr extended_storage_iterator(iterator_type base, Other... other)
-        : it{base, other...} {}
-
-    template<typename... Args>
-    requires (!stl::same_as<Other, Args> && ...) && (stl::constructible_from<Other, Args> && ...)
-    constexpr extended_storage_iterator(const extended_storage_iterator<It, Args...> &other)
-        : it{other.it} {}
-
-    constexpr extended_storage_iterator &operator++() noexcept {
-        return ++stl::get<It>(it), (++stl::get<Other>(it), ...), *this;
-    }
-
-    constexpr extended_storage_iterator operator++(int) noexcept {
-        const extended_storage_iterator orig = *this;
-        return ++(*this), orig;
-    }
-
-    [[nodiscard]] constexpr pointer operator->() const noexcept {
-        return operator*();
-    }
-
-    [[nodiscard]] constexpr reference operator*() const noexcept {
-        return {*stl::get<It>(it), *stl::get<Other>(it)...};
-    }
-
-    [[nodiscard]] constexpr iterator_type base() const noexcept {
-        return stl::get<It>(it);
-    }
-
-    template<typename... Args>
-    [[nodiscard]] constexpr bool operator==(const extended_storage_iterator<Args...> &other) const noexcept {
-        return stl::get<0>(it) == stl::get<0>(other.it);
-    }
-
-private:
-    stl::tuple<It, Other...> it;
-};
+/**
+ * @brief Extended storage iterator.
+ *
+ * Alias for the unified extended iterator: single element traversal goes
+ * through the same storage access layer used by views and groups.
+ *
+ * @tparam It Base entity iterator type.
+ * @tparam Accessor Storage accessor types.
+ */
+template<typename It, typename... Accessor>
+using extended_storage_iterator = extended_iterator<It, Accessor...>;
 
 } // namespace internal
 /*! @endcond */
@@ -399,13 +357,13 @@ public:
     /*! @brief Constant reverse iterator type. */
     using const_reverse_iterator = stl::reverse_iterator<const_iterator>;
     /*! @brief Extended iterable storage proxy. */
-    using iterable = iterable_adaptor<internal::extended_storage_iterator<typename base_type::iterator, iterator>>;
+    using iterable = iterable_adaptor<internal::extended_storage_iterator<typename base_type::iterator, internal::payload_accessor<container_type, traits_type::page_size>>>;
     /*! @brief Constant extended iterable storage proxy. */
-    using const_iterable = iterable_adaptor<internal::extended_storage_iterator<typename base_type::const_iterator, const_iterator>>;
+    using const_iterable = iterable_adaptor<internal::extended_storage_iterator<typename base_type::const_iterator, internal::payload_accessor<const container_type, traits_type::page_size>>>;
     /*! @brief Extended reverse iterable storage proxy. */
-    using reverse_iterable = iterable_adaptor<internal::extended_storage_iterator<typename base_type::reverse_iterator, reverse_iterator>>;
+    using reverse_iterable = iterable_adaptor<internal::extended_storage_iterator<typename base_type::reverse_iterator, internal::payload_accessor<container_type, traits_type::page_size>>>;
     /*! @brief Constant extended reverse iterable storage proxy. */
-    using const_reverse_iterable = iterable_adaptor<internal::extended_storage_iterator<typename base_type::const_reverse_iterator, const_reverse_iterator>>;
+    using const_reverse_iterable = iterable_adaptor<internal::extended_storage_iterator<typename base_type::const_reverse_iterator, internal::payload_accessor<const container_type, traits_type::page_size>>>;
     /*! @brief Storage deletion policy. */
     static constexpr deletion_policy storage_policy{traits_type::in_place_delete};
 
@@ -734,12 +692,12 @@ public:
      * @return An iterable object to use to _visit_ the storage.
      */
     [[nodiscard]] iterable each() noexcept {
-        return iterable{{base_type::begin(), begin()}, {base_type::end(), end()}};
+        return iterable{{base_type::begin(), internal::payload_accessor<container_type, traits_type::page_size>{&payload}}, {base_type::end(), internal::payload_accessor<container_type, traits_type::page_size>{&payload}}};
     }
 
     /*! @copydoc each */
     [[nodiscard]] const_iterable each() const noexcept {
-        return const_iterable{{base_type::cbegin(), cbegin()}, {base_type::cend(), cend()}};
+        return const_iterable{{base_type::cbegin(), internal::payload_accessor<const container_type, traits_type::page_size>{&payload}}, {base_type::cend(), internal::payload_accessor<const container_type, traits_type::page_size>{&payload}}};
     }
 
     /**
@@ -750,12 +708,12 @@ public:
      * @return A reverse iterable object to use to _visit_ the storage.
      */
     [[nodiscard]] reverse_iterable reach() noexcept {
-        return reverse_iterable{{base_type::rbegin(), rbegin()}, {base_type::rend(), rend()}};
+        return reverse_iterable{{base_type::rbegin(), internal::payload_accessor<container_type, traits_type::page_size>{&payload}}, {base_type::rend(), internal::payload_accessor<container_type, traits_type::page_size>{&payload}}};
     }
 
     /*! @copydoc reach */
     [[nodiscard]] const_reverse_iterable reach() const noexcept {
-        return const_reverse_iterable{{base_type::crbegin(), crbegin()}, {base_type::crend(), crend()}};
+        return const_reverse_iterable{{base_type::crbegin(), internal::payload_accessor<const container_type, traits_type::page_size>{&payload}}, {base_type::crend(), internal::payload_accessor<const container_type, traits_type::page_size>{&payload}}};
     }
 
 private:

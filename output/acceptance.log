@@ -1,0 +1,68 @@
+
+================================================================
+== 1. 行为等价测试（仓库自带测试入口 ctest）
+================================================================
+      Start 16: stl_ext
+16/16 Test #16: stl_ext ..........................   Passed    0.00 sec
+
+100% tests passed, 0 tests failed out of 16
+
+Total Test time (real) =   3.88 sec
+
+================================================================
+== 2. 行为等价测试（统一访问层专项，改造前后对比）
+================================================================
+[before] 基线头文件编译的等价测试：
+Running main() from /tmp/entt-baseline-build/_deps/googletest-src/googletest/src/gtest_main.cc
+[==========] 7 tests from 1 test suite ran. (1 ms total)
+[  PASSED  ] 7 tests.
+[after]  新头文件编译的等价测试：
+Running main() from /tmp/entt-baseline-build/_deps/googletest-src/googletest/src/gtest_main.cc
+[==========] 7 tests from 1 test suite ran. (1 ms total)
+[  PASSED  ] 7 tests.
+
+================================================================
+== 3. 万实体遍历耗时对比（10000 实体，改造前后）
+================================================================
+基准程序: output/bench/bench_10k.cpp (每轮 15 样本 x 5000 次迭代, 钉核, 12 轮交替, 取最小值/中位数)
+benchmark                before_ns    after_ns   delta%
+single_view_each            4218.1      4153.1   -1.54%
+single_view_range           4091.4      4202.9    2.72%
+multi_view_each             6467.4      6460.9   -0.10%
+multi_view_range           10583.6     10738.8    1.47%
+owned_group_each            5765.3      4685.6  -18.73%
+owned_group_range           5801.1      5742.3   -1.01%
+nonowned_group_range        5652.4      5715.0    1.11%
+storage_each                3201.1      3190.7   -0.32%
+storage_reach               4164.7      3077.3  -26.11%
+stable_view_each            2101.2      1960.0   -6.72%
+
+worst regression: 2.72% (acceptance limit: 5%)
+PASS: 万实体遍历耗时退化不超过 5%
+
+================================================================
+== 4. 编译期兼容证明（同一 TU 在改造前后头文件上编译）
+================================================================
+[before] compat.cpp 编译通过
+[after]  compat.cpp 编译通过
+静态断言（迭代器能力语义/值类型）在两版头文件上均成立
+
+================================================================
+== 5. 产物清单
+================================================================
+output/acceptance.log
+output/bench/bench_10k.cpp
+output/bench/bench_after
+output/bench/bench_after.txt
+output/bench/bench_before
+output/bench/bench_before.txt
+output/bench/comparison.md
+output/compat/compat.cpp
+output/ctest_after.log
+output/ctest_before.log
+output/equivalence/after.txt
+output/equivalence/before.txt
+output/probe/probe.cpp
+output/probe/probe_before
+output/recording.cast
+output/run_acceptance.sh

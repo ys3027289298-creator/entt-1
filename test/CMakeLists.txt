@@ -288,6 +288,7 @@ SETUP_BASIC_TEST(
         entt/entity/storage_entity.cpp
         entt/entity/storage_no_instance.cpp
         entt/entity/storage_utility.cpp
+        entt/entity/unified_access.cpp
         entt/entity/view.cpp
 )
 
